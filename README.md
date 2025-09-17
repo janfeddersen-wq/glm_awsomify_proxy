@@ -14,10 +14,16 @@ This is a Python-based proxy server designed to forward requests to the Cerebras
 
 - Python 3.7 or higher
 - `aiohttp` library
+- `Brotli` library (required for handling Brotli-compressed responses from Cerebras API)
 
-Install the required library:
+Install the required libraries:
 ```bash
-pip install aiohttp
+pip install aiohttp Brotli
+```
+
+Or install from requirements.txt:
+```bash
+pip install -r requirements.txt
 ```
 
 ## Configuration
