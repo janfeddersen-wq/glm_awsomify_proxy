@@ -239,7 +239,7 @@ class ProxyServer:
         request_body = await request.read()
         original_request_body = request_body
 
-        # Apply tool_call validation fix for chat completion requests only
+        # Apply tool_call validation fix for chat completion requests (ALWAYS ENABLED)
         if 'chat/completions' in path and request_body:
             try:
                 request_data = json.loads(request_body.decode('utf-8'))
@@ -248,16 +248,27 @@ class ProxyServer:
                 fixed_request_data = self._fix_missing_tool_responses(request_data)
                 fixed_msg_count = len(fixed_request_data.get('messages', []))
 
-                # Validate that the fixed data is valid JSON before using it
-                fixed_body = json.dumps(fixed_request_data, ensure_ascii=False).encode('utf-8')
-                # Test parse to ensure it's valid
-                json.loads(fixed_body.decode('utf-8'))
-
-                request_body = fixed_body
+                # Only use the fixed body if we actually made changes
                 if fixed_msg_count > original_msg_count:
+                    # Serialize with proper settings to match standard JSON formatting
+                    # Use separators without spaces, sort keys for consistency
+                    fixed_body = json.dumps(
+                        fixed_request_data,
+                        separators=(',', ':'),  # Compact format, no extra spaces
+                        ensure_ascii=True,       # Escape unicode characters
+                        sort_keys=False          # Preserve key order
+                    ).encode('utf-8')
+
+                    # Validate the serialized JSON
+                    test_parse = json.loads(fixed_body.decode('utf-8'))
+                    if not isinstance(test_parse, dict):
+                        raise ValueError("Serialized data is not a valid JSON object")
+
+                    request_body = fixed_body
                     logger.info(f"Applied tool_call fix: {original_msg_count} -> {fixed_msg_count} messages")
+                    logger.debug(f"Fixed body size: {len(fixed_body)} bytes")
             except Exception as e:
-                logger.warning(f"Could not apply tool_call fix, using original body: {e}")
+                logger.error(f"Tool call fix failed: {e}", exc_info=True)
                 request_body = original_request_body
 
         logger.info(f"Processing request to {target_url}")
