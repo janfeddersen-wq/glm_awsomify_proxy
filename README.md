@@ -17,6 +17,7 @@ This is a Python-based proxy server designed to forward requests to the Cerebras
   - Waits for the next available key instead of immediately failing
 - **Concurrency Support**: Built with `aiohttp` to efficiently handle multiple concurrent requests with thread-safe key rotation.
 - **Status Monitoring**: Built-in `/_status` endpoint to monitor API key health and rotation state.
+- **Request/Response Logging**: Optional filesystem logging to save all requests and responses as JSON files for auditing, debugging, or analysis.
 
 ## Requirements
 
@@ -58,6 +59,20 @@ Example JSON format:
 Example:
 ```bash
 CEREBRAS_COOLDOWN=90
+```
+
+**`LOG_REQUESTS`**: Enable request/response logging to filesystem (default: false)
+
+Example:
+```bash
+LOG_REQUESTS=true
+```
+
+**`LOG_DIR`**: Directory to save request/response logs (default: ./logs)
+
+Example:
+```bash
+LOG_DIR=/var/log/cerebras-proxy
 ```
 
 ## Usage
@@ -175,6 +190,80 @@ Example response:
 - `rate_limited_for`: Seconds remaining until the key can be retried (0 if available)
 - `error_count`: Number of consecutive errors for this key
 - `current_key`: Name of the key currently being used
+
+## Request/Response Logging
+
+The proxy includes optional filesystem logging to save all requests and responses for auditing, debugging, or analysis purposes.
+
+### Enabling Logging
+
+Set the `LOG_REQUESTS` environment variable to `true`:
+```bash
+export LOG_REQUESTS=true
+```
+
+Optionally, specify a custom log directory:
+```bash
+export LOG_DIR=/var/log/cerebras-proxy
+```
+
+### Log File Format
+
+Each request/response pair is saved as a separate JSON file with the following naming convention:
+```
+YYYYMMDD_HHMMSS_microseconds_METHOD_path_requestid.json
+```
+
+Logs are organized in date-based subdirectories:
+```
+logs/
+├── 2025-11-06/
+│   ├── 20251106_143022_123456_POST_chat_completions_abc123de.json
+│   ├── 20251106_143023_234567_POST_chat_completions_xyz789ab.json
+│   └── ...
+└── 2025-11-07/
+    └── ...
+```
+
+### Log Entry Structure
+
+Each log file contains:
+```json
+{
+  "timestamp": "2025-11-06T14:30:22.123456",
+  "request_id": "abc123de",
+  "request": {
+    "method": "POST",
+    "path": "chat/completions",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "[REDACTED]"
+    },
+    "body": {
+      "model": "llama3.1-70b",
+      "messages": [...]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "id": "chat-...",
+      "choices": [...]
+    }
+  },
+  "duration_ms": 1234.56
+}
+```
+
+### Privacy and Security
+
+- **Authorization headers are automatically redacted** in logs to prevent API key leakage
+- Binary data is base64-encoded if the body is not valid JSON or UTF-8
+- Logs are stored locally and never transmitted elsewhere
+- Consider disk space when enabling logging for high-traffic deployments
 
 ## Architecture
 
