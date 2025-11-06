@@ -230,11 +230,6 @@ class ProxyServer:
 
         target_url = f"{TARGET_API_HOST}{path}"
 
-        # Get all headers except Authorization and Host
-        headers = {key: value for key, value in request.headers.items()
-                   if key.lower() not in ('authorization', 'host')}
-        headers["User-Agent"] = "Cerebras-Proxy/1.0" # Add a User-Agent header
-
         # Read request body once for both forwarding and logging
         request_body = await request.read()
         original_request_body = request_body
@@ -250,9 +245,8 @@ class ProxyServer:
 
                 # Only use the fixed body if we actually made changes
                 if fixed_msg_count > original_msg_count:
-                    # Serialize with default settings (no custom formatting)
-                    # This ensures compatibility with Cerebras API expectations
-                    fixed_body = json.dumps(fixed_request_data).encode('utf-8')
+                    # Serialize with compact separators to match original formatting
+                    fixed_body = json.dumps(fixed_request_data, separators=(',', ':')).encode('utf-8')
 
                     # Validate the serialized JSON
                     test_parse = json.loads(fixed_body.decode('utf-8'))
@@ -260,11 +254,20 @@ class ProxyServer:
                         raise ValueError("Serialized data is not a valid JSON object")
 
                     request_body = fixed_body
-                    logger.info(f"Applied tool_call fix: {original_msg_count} -> {fixed_msg_count} messages")
-                    logger.debug(f"Fixed body size: {len(fixed_body)} bytes (original: {len(original_request_body)} bytes)")
+                    logger.info(f"Applied tool_call fix: {original_msg_count} -> {fixed_msg_count} messages (size: {len(original_request_body)} -> {len(fixed_body)} bytes)")
             except Exception as e:
                 logger.error(f"Tool call fix failed: {e}", exc_info=True)
                 request_body = original_request_body
+
+        # Get headers AFTER body modification, excluding Authorization, Host, and Content-Length
+        # Content-Length must be recalculated to match the (possibly modified) body
+        headers = {key: value for key, value in request.headers.items()
+                   if key.lower() not in ('authorization', 'host', 'content-length')}
+        headers["User-Agent"] = "Cerebras-Proxy/1.0"
+
+        # Set correct Content-Length for the (possibly modified) body
+        if request_body:
+            headers["Content-Length"] = str(len(request_body))
 
         logger.info(f"Processing request to {target_url}")
 
