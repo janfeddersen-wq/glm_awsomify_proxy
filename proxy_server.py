@@ -57,6 +57,72 @@ class ProxyServer:
             sanitized['authorization'] = '[REDACTED]'
         return sanitized
 
+    def _fix_missing_tool_responses(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validates and fixes messages array to ensure all tool_calls have corresponding tool responses.
+        If a tool_call is missing its response, injects a fake "failed" response.
+        """
+        # Only process chat completion requests with messages
+        if 'messages' not in request_data or not isinstance(request_data['messages'], list):
+            return request_data
+
+        messages = request_data['messages']
+        fixed_messages = []
+        pending_tool_calls = []  # Track tool_calls waiting for responses
+
+        for i, msg in enumerate(messages):
+            # Check if this message has tool_calls
+            if msg.get('role') == 'assistant' and 'tool_calls' in msg:
+                # Add this message
+                fixed_messages.append(msg)
+                # Track all tool_call IDs that need responses
+                for tool_call in msg.get('tool_calls', []):
+                    if 'id' in tool_call:
+                        pending_tool_calls.append(tool_call['id'])
+                continue
+
+            # Check if this is a tool response
+            if msg.get('role') == 'tool' and 'tool_call_id' in msg:
+                # Remove this tool_call_id from pending
+                tool_call_id = msg['tool_call_id']
+                if tool_call_id in pending_tool_calls:
+                    pending_tool_calls.remove(tool_call_id)
+                fixed_messages.append(msg)
+                continue
+
+            # If we have pending tool_calls and this is NOT a tool response,
+            # inject fake responses for all pending tool_calls
+            if pending_tool_calls:
+                logger.warning(f"Found {len(pending_tool_calls)} tool_calls without responses. Injecting fake 'failed' responses.")
+                for tool_call_id in pending_tool_calls:
+                    fake_response = {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": "failed"
+                    }
+                    fixed_messages.append(fake_response)
+                    logger.info(f"Injected fake tool response for tool_call_id: {tool_call_id}")
+                pending_tool_calls.clear()
+
+            # Add the current message
+            fixed_messages.append(msg)
+
+        # Handle any remaining pending tool_calls at the end
+        if pending_tool_calls:
+            logger.warning(f"Found {len(pending_tool_calls)} tool_calls without responses at end of messages. Injecting fake 'failed' responses.")
+            for tool_call_id in pending_tool_calls:
+                fake_response = {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": "failed"
+                }
+                fixed_messages.append(fake_response)
+                logger.info(f"Injected fake tool response for tool_call_id: {tool_call_id}")
+
+        # Update the request data with fixed messages
+        request_data['messages'] = fixed_messages
+        return request_data
+
     async def _save_request_response_log(
         self,
         request_method: str,
@@ -167,6 +233,18 @@ class ProxyServer:
         # Read request body once for both forwarding and logging
         request_body = await request.read()
 
+        # Apply tool_call validation fix for chat completion requests
+        original_request_body = request_body
+        try:
+            if request_body and request.content_type == 'application/json':
+                request_data = json.loads(request_body.decode('utf-8'))
+                fixed_request_data = self._fix_missing_tool_responses(request_data)
+                request_body = json.dumps(fixed_request_data).encode('utf-8')
+        except (json.JSONDecodeError, UnicodeDecodeError, Exception) as e:
+            logger.debug(f"Could not parse request body for tool_call validation: {e}")
+            # Use original body if parsing fails
+            request_body = original_request_body
+
         logger.info(f"Processing request to {target_url}")
 
         # Retry with automatic key rotation
@@ -216,7 +294,7 @@ class ProxyServer:
                                     request_method=method,
                                     request_path=path,
                                     request_headers=dict(request.headers),
-                                    request_body=request_body,
+                                    request_body=original_request_body,
                                     response_status=resp.status,
                                     response_headers=dict(resp.headers),
                                     response_body=body,
@@ -226,7 +304,7 @@ class ProxyServer:
                                 return response
                     else:
                         # For methods with bodies (POST, PUT, PATCH, DELETE)
-                        # Use the request body we read earlier
+                        # Use the fixed request body for forwarding
                         async with session.request(method, target_url, headers=headers,
                                                    data=request_body) as resp:
                             # Stream the response body back to the client
@@ -260,7 +338,7 @@ class ProxyServer:
                                     request_method=method,
                                     request_path=path,
                                     request_headers=dict(request.headers),
-                                    request_body=request_body,
+                                    request_body=original_request_body,
                                     response_status=resp.status,
                                     response_headers=dict(resp.headers),
                                     response_body=body,
