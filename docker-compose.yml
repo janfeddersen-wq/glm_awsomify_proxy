@@ -10,3 +10,7 @@ services:
     environment:
       - CEREBRAS_API_KEYS
       - CEREBRAS_COOLDOWN=${CEREBRAS_COOLDOWN:-60}
+      - LOG_REQUESTS=${LOG_REQUESTS:-true}
+      - LOG_DIR=${LOG_DIR:-/app/logs}
+    volumes:
+      - ./logs:/app/logs

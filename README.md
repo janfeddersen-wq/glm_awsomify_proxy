@@ -120,6 +120,12 @@ This project includes Docker configuration for easy deployment.
 
 The proxy will be available at `http://localhost:18080`.
 
+**Note:** Logs are automatically mounted to `./logs` on the host machine for easy access. You can customize logging behavior in the `.env` file:
+```bash
+LOG_REQUESTS=true
+LOG_DIR=/app/logs
+```
+
 3. Make requests to the proxy server as you would to the Cerebras API, but use the proxy's address instead:
    
    For example, if the Cerebras API endpoint is:
