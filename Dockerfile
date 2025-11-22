@@ -11,7 +11,7 @@ COPY requirements.txt ./
 RUN pip install -r requirements.txt
 
 # Copy the Python files
-COPY api_key_manager.py proxy_server.py ./
+COPY api_key_manager.py proxy_server.py incoming_key_manager.py manage_keys.py ./
 
 # Expose port 8080
 EXPOSE 8080
