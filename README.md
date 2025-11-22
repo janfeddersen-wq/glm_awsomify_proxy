@@ -5,7 +5,7 @@ A smart proxy server for Cerebras API with intelligent key rotation, request rou
 ## Features
 
 - 🔄 **Smart API Key Rotation** - Automatic rotation on rate limits (429) with cooldown tracking
-- 🚀 **Strategic Routing** - Routes large requests (>120k chars) to alternative APIs (Synthetic/Z.ai)
+- 🚀 **Strategic Routing** - Routes large requests (>120k tokens) to alternative APIs (Synthetic/Z.ai)
 - ⚡ **Fallback on Cooldown** - Routes to alternative APIs when all Cerebras keys are rate-limited
 - 🔐 **Incoming API Key Management** - SQLite-based authentication for client requests
 - 🛠️ **Auto Tool Call Validation** - Fixes missing tool responses automatically
@@ -93,7 +93,9 @@ curl -X POST http://localhost:18080/chat/completions \
 
 ## Strategic Routing for Large Requests
 
-Requests with user/system message content >120k characters are automatically routed to alternative APIs:
+Requests with user/system message content >120k tokens (~480k characters) are automatically routed to alternative APIs:
+
+**Token Estimation:** Uses simple approximation of 1 token ≈ 4 characters for fast routing decisions.
 
 1. **Primary**: Synthetic API (`api.synthetic.new`) - Model: `hf:zai-org/GLM-4.6`
 2. **Fallback**: Z.ai API (`api.z.ai`) - Model: `glm-4.6`
@@ -169,11 +171,11 @@ Client Request
     ↓
 [Verify Incoming API Key] (if ENABLE_INCOMING_AUTH=true)
     ↓
-[Check Message Size]
+[Estimate Token Count from Message Content]
     ↓
-> 120k chars? → Route to Synthetic API → Fails? → Route to Z.ai API
+> 120k tokens? → Route to Synthetic API → Fails? → Route to Z.ai API
     ↓
-< 120k chars? → [Check if all Cerebras keys rate-limited]
+< 120k tokens? → [Check if all Cerebras keys rate-limited]
     ↓                                    ↓
     ↓                    Yes + FALLBACK_ON_COOLDOWN=true?
     ↓                                    ↓

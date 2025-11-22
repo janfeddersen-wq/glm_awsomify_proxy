@@ -21,12 +21,12 @@ logger = logging.getLogger(__name__)
 # Target API host
 TARGET_API_HOST = "https://api.cerebras.ai/v1/"
 
-# Alternative API hosts for large requests (>120k message content)
+# Alternative API hosts for large requests (>120k tokens)
 SYNTHETIC_API_HOST = "https://api.synthetic.new/openai/v1/"
 SYNTHETIC_MODEL = "hf:zai-org/GLM-4.6"
 ZAI_API_HOST = "https://api.z.ai/api/coding/paas/v4/"
 ZAI_MODEL = "glm-4.6"
-MESSAGE_SIZE_THRESHOLD = 120000  # 120k characters
+MESSAGE_TOKEN_THRESHOLD = 120000  # 120k tokens (~480k characters, approximation: 1 token ≈ 4 chars)
 
 # Error codes that trigger key rotation
 ROTATE_KEY_ERROR_CODES = {429, 500}
@@ -71,16 +71,17 @@ class ProxyServer:
             sanitized['authorization'] = '[REDACTED]'
         return sanitized
 
-    def _calculate_message_content_size(self, request_data: Dict[str, Any]) -> int:
+    def _estimate_message_tokens(self, request_data: Dict[str, Any]) -> int:
         """
-        Calculate the total character count of user and system message content.
+        Estimate the total token count of user and system message content.
+        Uses approximation: 1 token ≈ 4 characters.
         Only counts 'user' and 'system' role messages, not assistant/tool responses.
         Returns 0 if no messages are present.
         """
         if 'messages' not in request_data or not isinstance(request_data['messages'], list):
             return 0
 
-        total_size = 0
+        total_chars = 0
         for msg in request_data['messages']:
             # Only count user and system messages (actual input, not conversation history)
             role = msg.get('role', '')
@@ -90,14 +91,15 @@ class ProxyServer:
             # Count content field
             if 'content' in msg:
                 if isinstance(msg['content'], str):
-                    total_size += len(msg['content'])
+                    total_chars += len(msg['content'])
                 elif isinstance(msg['content'], list):
                     # Handle multimodal content (e.g., text + images)
                     for part in msg['content']:
                         if isinstance(part, dict) and 'text' in part:
-                            total_size += len(part['text'])
+                            total_chars += len(part['text'])
 
-        return total_size
+        # Approximate tokens: 1 token ≈ 4 characters
+        return total_chars // 4
 
     def _fix_missing_tool_responses(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -193,7 +195,7 @@ class ProxyServer:
 
         # Try Synthetic API first
         if self.synthetic_api_key:
-            logger.info(f"Routing large request ({self._calculate_message_content_size(request_data)} chars) to Synthetic API")
+            logger.info(f"Routing large request (~{self._estimate_message_tokens(request_data)} tokens) to Synthetic API")
             try:
                 synthetic_url = f"{SYNTHETIC_API_HOST}{path}"
                 synthetic_body = json.dumps(synthetic_request_data, separators=(',', ':')).encode('utf-8')
@@ -446,10 +448,10 @@ class ProxyServer:
                 else:
                     request_data_for_routing = request_data
 
-                # Check message size and route to alternative API if needed
-                message_size = self._calculate_message_content_size(request_data_for_routing)
-                if message_size > MESSAGE_SIZE_THRESHOLD:
-                    logger.info(f"Message content size ({message_size} chars) exceeds threshold ({MESSAGE_SIZE_THRESHOLD}), routing to alternative APIs")
+                # Check message token count and route to alternative API if needed
+                estimated_tokens = self._estimate_message_tokens(request_data_for_routing)
+                if estimated_tokens > MESSAGE_TOKEN_THRESHOLD:
+                    logger.info(f"Message content (~{estimated_tokens} tokens) exceeds threshold ({MESSAGE_TOKEN_THRESHOLD} tokens), routing to alternative APIs")
                     return await self._route_to_alternative_api(
                         request_data=request_data_for_routing,
                         path=path,
@@ -662,7 +664,7 @@ async def main():
     zai_api_key = os.environ.get("ZAI_API_KEY")
 
     if synthetic_api_key:
-        logger.info("Synthetic API key configured for large requests (>120k chars)")
+        logger.info("Synthetic API key configured for large requests (>120k tokens)")
     if zai_api_key:
         logger.info("Z.ai API key configured as fallback for large requests")
 
