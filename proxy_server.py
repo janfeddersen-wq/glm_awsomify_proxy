@@ -72,7 +72,8 @@ class ProxyServer:
 
     def _calculate_message_content_size(self, request_data: Dict[str, Any]) -> int:
         """
-        Calculate the total character count of all message content in a request.
+        Calculate the total character count of user and system message content.
+        Only counts 'user' and 'system' role messages, not assistant/tool responses.
         Returns 0 if no messages are present.
         """
         if 'messages' not in request_data or not isinstance(request_data['messages'], list):
@@ -80,6 +81,11 @@ class ProxyServer:
 
         total_size = 0
         for msg in request_data['messages']:
+            # Only count user and system messages (actual input, not conversation history)
+            role = msg.get('role', '')
+            if role not in ('user', 'system'):
+                continue
+
             # Count content field
             if 'content' in msg:
                 if isinstance(msg['content'], str):
@@ -89,10 +95,6 @@ class ProxyServer:
                     for part in msg['content']:
                         if isinstance(part, dict) and 'text' in part:
                             total_size += len(part['text'])
-
-            # Count tool_calls if present
-            if 'tool_calls' in msg:
-                total_size += len(json.dumps(msg['tool_calls']))
 
         return total_size
 
