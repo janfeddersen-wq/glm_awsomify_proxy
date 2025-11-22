@@ -16,6 +16,7 @@ services:
       - INCOMING_KEY_DB=${INCOMING_KEY_DB:-/app/data/incoming_keys.db}
       - SYNTHETIC_API_KEY=${SYNTHETIC_API_KEY}
       - ZAI_API_KEY=${ZAI_API_KEY}
+      - FALLBACK_ON_COOLDOWN=${FALLBACK_ON_COOLDOWN:-false}
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data

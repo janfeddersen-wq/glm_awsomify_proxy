@@ -160,3 +160,13 @@ class ApiKeyManager:
                 ],
                 "current_key": self._key_states[self._current_index].name
             }
+
+    async def all_keys_rate_limited(self) -> bool:
+        """
+        Check if all keys are currently rate-limited.
+
+        Returns:
+            True if all keys are rate-limited, False otherwise.
+        """
+        async with self._lock:
+            return all(not state.is_available() for state in self._key_states)

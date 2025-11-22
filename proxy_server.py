@@ -42,11 +42,12 @@ class ProxyServer:
     with round-robin API key rotation.
     """
     def __init__(self, api_key_manager: ApiKeyManager, incoming_key_manager: IncomingKeyManager = None,
-                 synthetic_api_key: str = None, zai_api_key: str = None):
+                 synthetic_api_key: str = None, zai_api_key: str = None, fallback_on_cooldown: bool = False):
         self.api_key_manager = api_key_manager
         self.incoming_key_manager = incoming_key_manager
         self.synthetic_api_key = synthetic_api_key
         self.zai_api_key = zai_api_key
+        self.fallback_on_cooldown = fallback_on_cooldown
         self.app = web.Application()
         # Add status endpoint
         self.app.router.add_get("/_status", self.status_handler)
@@ -476,6 +477,29 @@ class ProxyServer:
 
         logger.info(f"Processing request to {target_url}")
 
+        # Check if all Cerebras keys are rate-limited and fallback is enabled
+        if self.fallback_on_cooldown and await self.api_key_manager.all_keys_rate_limited():
+            if self.synthetic_api_key or self.zai_api_key:
+                logger.warning("All Cerebras keys are rate-limited. Falling back to alternative APIs.")
+                # Parse request data for routing if not already done
+                if request_data_for_routing is None and 'chat/completions' in path and request_body:
+                    try:
+                        request_data_for_routing = json.loads(request_body.decode('utf-8'))
+                    except:
+                        pass
+
+                if request_data_for_routing:
+                    return await self._route_to_alternative_api(
+                        request_data=request_data_for_routing,
+                        path=path,
+                        method=request.method,
+                        original_headers=dict(request.headers),
+                        start_time=start_time,
+                        original_request_body=original_request_body
+                    )
+            else:
+                logger.warning("All Cerebras keys rate-limited but no alternative APIs configured")
+
         # Retry with automatic key rotation
         max_retries = self.api_key_manager.get_key_count() * 2  # Allow multiple passes through all keys
 
@@ -652,12 +676,21 @@ async def main():
     else:
         logger.info("Incoming API key authentication disabled (set ENABLE_INCOMING_AUTH=true to enable)")
 
+    # Get fallback on cooldown configuration
+    fallback_on_cooldown = os.environ.get("FALLBACK_ON_COOLDOWN", "false").lower() == "true"
+    if fallback_on_cooldown:
+        if synthetic_api_key or zai_api_key:
+            logger.info("Fallback on cooldown enabled: will route to alternative APIs when all Cerebras keys are rate-limited")
+        else:
+            logger.warning("Fallback on cooldown enabled but no alternative APIs configured")
+
     # Create and run the proxy server
     proxy = ProxyServer(
         api_key_manager,
         incoming_key_manager=incoming_key_manager,
         synthetic_api_key=synthetic_api_key,
-        zai_api_key=zai_api_key
+        zai_api_key=zai_api_key,
+        fallback_on_cooldown=fallback_on_cooldown
     )
     logger.info("About to call proxy.run() with proper event loop integration")
     await proxy.run()
