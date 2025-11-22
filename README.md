@@ -7,6 +7,7 @@ A smart proxy server for Cerebras API with intelligent key rotation, request rou
 - 🔄 **Smart API Key Rotation** - Automatic rotation on rate limits (429) with cooldown tracking
 - 🚀 **Strategic Routing** - Routes large requests (>120k tokens) to alternative APIs (Synthetic/Z.ai)
 - ⚡ **Fallback on Cooldown** - Routes to alternative APIs when all Cerebras keys are rate-limited
+- 🔧 **Smart Error Handling** - Auto-retries with alternative APIs on 400/503 errors from Cerebras
 - 🔐 **Incoming API Key Management** - SQLite-based authentication for client requests
 - 🛠️ **Auto Tool Call Validation** - Fixes missing tool responses automatically
 - 📝 **Request/Response Logging** - Optional filesystem logging for debugging
@@ -133,6 +134,24 @@ ZAI_API_KEY=sk-your-zai-key
 
 **Use Case:** During high-traffic periods when all Cerebras keys are exhausted, this provides faster response times by utilizing alternative APIs instead of waiting.
 
+## Smart Error Handling
+
+The proxy automatically routes to alternative APIs when Cerebras encounters certain errors, providing seamless failover without manual intervention.
+
+### Supported Error Types
+
+**400 Context Length Exceeded:**
+- Cerebras returns: `{"code": "context_length_exceeded", "message": "...Current length is 132032 while limit is 131072"}`
+- Action: Automatically route to Synthetic API → Falls back to Z.ai if needed
+- Benefit: Seamlessly uses higher-capacity alternative APIs when requests exceed Cerebras's context window
+
+**503 Service Unavailable:**
+- Cerebras returns: 503 (service temporarily unavailable)
+- Action: Automatically route to Synthetic API → Falls back to Z.ai if needed
+- Benefit: Maintains availability during Cerebras downtime or maintenance
+
+**Requirements:** `SYNTHETIC_API_KEY` and/or `ZAI_API_KEY` must be configured for error handling to work.
+
 ## Configuration
 
 ### Environment Variables
@@ -182,6 +201,10 @@ Client Request
     ↓                         Route to Synthetic/Z.ai API
     ↓
     ↓  No or disabled → Route to Cerebras API (with smart rotation/wait)
+    ↓                                    ↓
+    ↓                         Returns 400 context_length_exceeded or 503?
+    ↓                                    ↓
+    ↓                         Route to Synthetic/Z.ai API
     ↓
 [Fix Tool Calls if needed]
     ↓

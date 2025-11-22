@@ -536,6 +536,40 @@ class ProxyServer:
                                 logger.warning(f"Server error (500), trying next key...")
                                 await self.api_key_manager.mark_key_rate_limited(api_key)
                                 continue
+                            elif resp.status == 400:
+                                # Check if this is a context_length_exceeded error
+                                try:
+                                    error_data = json.loads(body.decode('utf-8'))
+                                    error_code = error_data.get('error', {}).get('code') or error_data.get('code')
+                                    if error_code == 'context_length_exceeded':
+                                        logger.warning(f"Context length exceeded (400), routing to alternative APIs")
+                                        if (self.synthetic_api_key or self.zai_api_key) and request_data_for_routing:
+                                            return await self._route_to_alternative_api(
+                                                request_data=request_data_for_routing,
+                                                path=path,
+                                                method=method,
+                                                original_headers=dict(request.headers),
+                                                start_time=start_time,
+                                                original_request_body=original_request_body
+                                            )
+                                except:
+                                    pass
+                                # If not context_length_exceeded or can't route, fall through to return the 400 error
+                                logger.info(f"Request completed with status {resp.status}")
+                            elif resp.status == 503:
+                                # Service unavailable, route to alternative APIs if available
+                                logger.warning(f"Service unavailable (503), routing to alternative APIs")
+                                if (self.synthetic_api_key or self.zai_api_key) and request_data_for_routing:
+                                    return await self._route_to_alternative_api(
+                                        request_data=request_data_for_routing,
+                                        path=path,
+                                        method=method,
+                                        original_headers=dict(request.headers),
+                                        start_time=start_time,
+                                        original_request_body=original_request_body
+                                    )
+                                # If can't route to alternative APIs, fall through to return the 503 error
+                                logger.info(f"Request completed with status {resp.status}")
                             else:
                                 # Success or non-retryable error
                                 if resp.status < 400:
@@ -580,6 +614,40 @@ class ProxyServer:
                                 logger.warning(f"Server error (500), trying next key...")
                                 await self.api_key_manager.mark_key_rate_limited(api_key)
                                 continue
+                            elif resp.status == 400:
+                                # Check if this is a context_length_exceeded error
+                                try:
+                                    error_data = json.loads(body.decode('utf-8'))
+                                    error_code = error_data.get('error', {}).get('code') or error_data.get('code')
+                                    if error_code == 'context_length_exceeded':
+                                        logger.warning(f"Context length exceeded (400), routing to alternative APIs")
+                                        if (self.synthetic_api_key or self.zai_api_key) and request_data_for_routing:
+                                            return await self._route_to_alternative_api(
+                                                request_data=request_data_for_routing,
+                                                path=path,
+                                                method=method,
+                                                original_headers=dict(request.headers),
+                                                start_time=start_time,
+                                                original_request_body=original_request_body
+                                            )
+                                except:
+                                    pass
+                                # If not context_length_exceeded or can't route, fall through to return the 400 error
+                                logger.info(f"Request completed with status {resp.status}")
+                            elif resp.status == 503:
+                                # Service unavailable, route to alternative APIs if available
+                                logger.warning(f"Service unavailable (503), routing to alternative APIs")
+                                if (self.synthetic_api_key or self.zai_api_key) and request_data_for_routing:
+                                    return await self._route_to_alternative_api(
+                                        request_data=request_data_for_routing,
+                                        path=path,
+                                        method=method,
+                                        original_headers=dict(request.headers),
+                                        start_time=start_time,
+                                        original_request_body=original_request_body
+                                    )
+                                # If can't route to alternative APIs, fall through to return the 503 error
+                                logger.info(f"Request completed with status {resp.status}")
                             else:
                                 # Success or non-retryable error
                                 if resp.status < 400:
