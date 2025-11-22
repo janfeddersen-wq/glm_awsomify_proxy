@@ -26,7 +26,7 @@ SYNTHETIC_API_HOST = "https://api.synthetic.new/openai/v1/"
 SYNTHETIC_MODEL = "hf:zai-org/GLM-4.6"
 ZAI_API_HOST = "https://api.z.ai/api/coding/paas/v4/"
 ZAI_MODEL = "glm-4.6"
-MESSAGE_TOKEN_THRESHOLD = 120000  # 120k tokens (~480k characters, approximation: 1 token ≈ 4 chars)
+MESSAGE_TOKEN_THRESHOLD = 120000  # 120k tokens (~204k characters, approximation: 1 token ≈ 1.7 chars)
 
 # Error codes that trigger key rotation
 ROTATE_KEY_ERROR_CODES = {429, 500}
@@ -74,7 +74,7 @@ class ProxyServer:
     def _estimate_message_tokens(self, request_data: Dict[str, Any]) -> int:
         """
         Estimate the total token count of user and system message content.
-        Uses approximation: 1 token ≈ 4 characters.
+        Uses approximation: 1 token ≈ 1.7 characters (based on actual Cerebras API data).
         Only counts 'user' and 'system' role messages, not assistant/tool responses.
         Returns 0 if no messages are present.
         """
@@ -98,8 +98,8 @@ class ProxyServer:
                         if isinstance(part, dict) and 'text' in part:
                             total_chars += len(part['text'])
 
-        # Approximate tokens: 1 token ≈ 4 characters
-        return total_chars // 4
+        # Approximate tokens: 1 token ≈ 1.7 characters (empirically determined from API usage)
+        return int(total_chars / 1.7)
 
     def _fix_missing_tool_responses(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """

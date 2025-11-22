@@ -94,9 +94,9 @@ curl -X POST http://localhost:18080/chat/completions \
 
 ## Strategic Routing for Large Requests
 
-Requests with user/system message content >120k tokens (~480k characters) are automatically routed to alternative APIs:
+Requests with user/system message content >120k tokens (~204k characters) are automatically routed to alternative APIs:
 
-**Token Estimation:** Uses simple approximation of 1 token ≈ 4 characters for fast routing decisions.
+**Token Estimation:** Uses empirically-determined approximation of 1 token ≈ 1.7 characters based on actual Cerebras API usage data.
 
 1. **Primary**: Synthetic API (`api.synthetic.new`) - Model: `hf:zai-org/GLM-4.6`
 2. **Fallback**: Z.ai API (`api.z.ai`) - Model: `glm-4.6`
