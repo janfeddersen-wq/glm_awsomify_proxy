@@ -7,7 +7,7 @@ A smart proxy server for Cerebras API with intelligent key rotation, request rou
 - 🔄 **Smart API Key Rotation** - Automatic rotation on rate limits (429) with cooldown tracking
 - 🚀 **Strategic Routing** - Routes large requests (>120k tokens) to alternative APIs (Synthetic/Z.ai)
 - ⚡ **Fallback on Cooldown** - Routes to alternative APIs when all Cerebras keys are rate-limited
-- 🔧 **Smart Error Handling** - Auto-retries with alternative APIs on 400/503 errors from Cerebras
+- 🔧 **Smart Error Handling** - Auto-retries with alternative APIs on 400/503 errors and embedded quota errors from Cerebras
 - 🔐 **Incoming API Key Management** - SQLite-based authentication for client requests
 - 🛠️ **Auto Tool Call Validation** - Fixes missing tool responses automatically
 - 📝 **Request/Response Logging** - Optional filesystem logging for debugging
@@ -159,6 +159,12 @@ The proxy automatically routes to alternative APIs when Cerebras encounters cert
 - Cerebras returns: 503 (service temporarily unavailable)
 - Action: Automatically route to Synthetic API → Falls back to Z.ai if needed
 - Benefit: Maintains availability during Cerebras downtime or maintenance
+
+**Embedded Token Quota Error:**
+- Cerebras returns: 200 OK with embedded error in response body: `{"choices": [{"message": {"content": "API Error: 403 {\"error\":{\"type\":\"new_api_error\",\"message\":\"token quota is not enough, token remain quota: ¥0.155328, need quota: ¥0.162586...\"}}"}}]}`
+- Detection: Proxy checks for "token quota is not enough" pattern in `choices[0].message.content`
+- Action: Automatically route to Synthetic API → Falls back to Z.ai if needed
+- Benefit: Handles quota exhaustion errors from underlying API providers that Cerebras wraps
 
 **Requirements:** `SYNTHETIC_API_KEY` and/or `ZAI_API_KEY` must be configured for error handling to work.
 

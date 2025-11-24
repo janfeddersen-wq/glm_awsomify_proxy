@@ -590,6 +590,26 @@ class ProxyServer:
                             else:
                                 # Success or non-retryable error
                                 if resp.status < 400:
+                                    # Check for embedded token quota error in response body
+                                    try:
+                                        response_data = json.loads(body.decode('utf-8'))
+                                        choices = response_data.get('choices', [])
+                                        if choices and len(choices) > 0:
+                                            message_content = choices[0].get('message', {}).get('content', '')
+                                            if 'token quota is not enough' in message_content:
+                                                logger.warning("Detected embedded token quota error in response, routing to alternative APIs")
+                                                if (self.synthetic_api_key or self.zai_api_key) and request_data_for_routing:
+                                                    return await self._route_to_alternative_api(
+                                                        request_data=request_data_for_routing,
+                                                        path=path,
+                                                        method=method,
+                                                        original_headers=dict(request.headers),
+                                                        start_time=start_time,
+                                                        original_request_body=original_request_body
+                                                    )
+                                    except:
+                                        pass  # Not JSON or parsing failed, continue normally
+
                                     await self.api_key_manager.mark_key_success(api_key)
                                 logger.info(f"Request completed with status {resp.status}")
 
@@ -694,6 +714,26 @@ class ProxyServer:
                             else:
                                 # Success or non-retryable error
                                 if resp.status < 400:
+                                    # Check for embedded token quota error in response body
+                                    try:
+                                        response_data = json.loads(body.decode('utf-8'))
+                                        choices = response_data.get('choices', [])
+                                        if choices and len(choices) > 0:
+                                            message_content = choices[0].get('message', {}).get('content', '')
+                                            if 'token quota is not enough' in message_content:
+                                                logger.warning("Detected embedded token quota error in response, routing to alternative APIs")
+                                                if (self.synthetic_api_key or self.zai_api_key) and request_data_for_routing:
+                                                    return await self._route_to_alternative_api(
+                                                        request_data=request_data_for_routing,
+                                                        path=path,
+                                                        method=method,
+                                                        original_headers=dict(request.headers),
+                                                        start_time=start_time,
+                                                        original_request_body=original_request_body
+                                                    )
+                                    except:
+                                        pass  # Not JSON or parsing failed, continue normally
+
                                     await self.api_key_manager.mark_key_success(api_key)
                                 logger.info(f"Request completed with status {resp.status}")
 
