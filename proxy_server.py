@@ -24,6 +24,7 @@ TARGET_API_HOST = "https://api.cerebras.ai/v1/"
 # Alternative API hosts for large requests (>120k tokens)
 SYNTHETIC_API_HOST = "https://api.synthetic.new/openai/v1/"
 SYNTHETIC_MODEL = "hf:zai-org/GLM-4.6"
+SYNTHETIC_VISION_MODEL = "hf:Qwen/Qwen3-VL-235B-A22B-Instruct"
 ZAI_API_HOST = "https://api.z.ai/api/coding/paas/v4/"
 ZAI_MODEL = "glm-4.6"
 
@@ -147,6 +148,28 @@ class ProxyServer:
         fixed_request_data['messages'] = fixed_messages
         return fixed_request_data
 
+    def _has_image_content(self, request_data: Dict[str, Any]) -> bool:
+        """
+        Check if the request contains image content in any message.
+
+        Images can be present in the OpenAI-style format where message content
+        is an array containing objects with type "image_url".
+
+        Returns:
+            True if any message contains image content, False otherwise
+        """
+        messages = request_data.get('messages', [])
+        if not isinstance(messages, list):
+            return False
+
+        for msg in messages:
+            content = msg.get('content')
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get('type') == 'image_url':
+                        return True
+        return False
+
     async def _route_to_alternative_api(
         self,
         request_data: Dict[str, Any],
@@ -154,16 +177,21 @@ class ProxyServer:
         method: str,
         original_headers: Dict[str, str],
         start_time: datetime,
-        original_request_body: bytes
+        original_request_body: bytes,
+        override_model: str = None
     ) -> web.Response:
         """
         Route large requests to alternative APIs with fallback logic.
         First tries Synthetic API, then falls back to Z.ai API if that fails.
+
+        Args:
+            override_model: Optional model to use instead of SYNTHETIC_MODEL (e.g., for vision requests)
         """
         # Prepare modified request data with model change
+        synthetic_model = override_model if override_model else SYNTHETIC_MODEL
         synthetic_request_data = copy.deepcopy(request_data)
         if 'model' in synthetic_request_data:
-            synthetic_request_data['model'] = SYNTHETIC_MODEL
+            synthetic_request_data['model'] = synthetic_model
 
         zai_request_data = copy.deepcopy(request_data)
         if 'model' in zai_request_data:
@@ -171,7 +199,7 @@ class ProxyServer:
 
         # Try Synthetic API first
         if self.synthetic_api_key:
-            logger.info(f"Routing large request to Synthetic API")
+            logger.info(f"Routing request to Synthetic API with model: {synthetic_model}")
             try:
                 synthetic_url = f"{SYNTHETIC_API_HOST}{path}"
                 synthetic_body = json.dumps(synthetic_request_data, separators=(',', ':')).encode('utf-8')
@@ -469,6 +497,22 @@ class ProxyServer:
             headers["Content-Length"] = str(len(request_body))
 
         logger.info(f"Processing request to {target_url}")
+
+        # Check if request contains images and route to vision model
+        if request_data_for_routing and self._has_image_content(request_data_for_routing):
+            if self.synthetic_api_key:
+                logger.info("Image content detected, routing to Synthetic API with vision model")
+                return await self._route_to_alternative_api(
+                    request_data=request_data_for_routing,
+                    path=path,
+                    method=request.method,
+                    original_headers=dict(request.headers),
+                    start_time=start_time,
+                    original_request_body=original_request_body,
+                    override_model=SYNTHETIC_VISION_MODEL
+                )
+            else:
+                logger.warning("Image content detected but Synthetic API key not configured")
 
         # Check if all Cerebras keys are rate-limited and fallback is enabled
         if self.fallback_on_cooldown and await self.api_key_manager.all_keys_rate_limited():

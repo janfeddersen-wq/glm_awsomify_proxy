@@ -218,6 +218,99 @@ class IncomingKeyManager:
         finally:
             conn.close()
 
+    def enable_api_key(self, api_key: str) -> bool:
+        """
+        Re-enable a revoked API key.
+
+        Args:
+            api_key: The API key to enable
+
+        Returns:
+            True if successfully enabled, False if key doesn't exist or not revoked
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE api_keys
+                SET revoked = 0, revoked_at = NULL
+                WHERE api_key = ? AND revoked = 1
+            """, (api_key,))
+
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                logger.info(f"Enabled API key: {api_key[:10]}...")
+                return True
+            else:
+                logger.warning(f"Attempted to enable non-existent or already active key")
+                return False
+        finally:
+            conn.close()
+
+    def enable_by_id(self, key_id: int) -> bool:
+        """
+        Re-enable a revoked API key by its ID.
+
+        Args:
+            key_id: The ID of the API key to enable
+
+        Returns:
+            True if successfully enabled, False if key doesn't exist or not revoked
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE api_keys
+                SET revoked = 0, revoked_at = NULL
+                WHERE id = ? AND revoked = 1
+            """, (key_id,))
+
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                logger.info(f"Enabled API key by ID: {key_id}")
+                return True
+            else:
+                logger.warning(f"Attempted to enable non-existent or already active key with ID: {key_id}")
+                return False
+        finally:
+            conn.close()
+
+    def enable_by_name(self, name: str) -> bool:
+        """
+        Re-enable a revoked API key by its name.
+
+        Args:
+            name: The name of the API key to enable
+
+        Returns:
+            True if successfully enabled, False if key doesn't exist or not revoked
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE api_keys
+                SET revoked = 0, revoked_at = NULL
+                WHERE name = ? AND revoked = 1
+            """, (name,))
+
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                logger.info(f"Enabled API key by name: {name}")
+                return True
+            else:
+                logger.warning(f"Attempted to enable non-existent or already active key with name: {name}")
+                return False
+        finally:
+            conn.close()
+
     def list_api_keys(self) -> List[Dict[str, Any]]:
         """
         List all API keys (both active and revoked).

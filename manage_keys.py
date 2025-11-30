@@ -84,6 +84,35 @@ def cmd_revoke(args):
         sys.exit(1)
 
 
+def cmd_enable(args):
+    """Re-enable a revoked API key by ID, name, or API key."""
+    manager = IncomingKeyManager(args.db)
+    identifier = args.identifier
+    success = False
+    enable_type = ""
+
+    # Detect what type of identifier was provided
+    if identifier.isdigit():
+        # It's an ID
+        key_id = int(identifier)
+        success = manager.enable_by_id(key_id)
+        enable_type = f"ID {key_id}"
+    elif identifier.startswith("sk-"):
+        # It's an API key
+        success = manager.enable_api_key(identifier)
+        enable_type = f"API key {identifier[:20]}..."
+    else:
+        # It's a name
+        success = manager.enable_by_name(identifier)
+        enable_type = f"name '{identifier}'"
+
+    if success:
+        print(f"\n✓ API Key re-enabled successfully by {enable_type}\n")
+    else:
+        print(f"\n✗ Failed to enable key by {enable_type} (not found or already active)\n")
+        sys.exit(1)
+
+
 def cmd_stats(args):
     """Show statistics."""
     manager = IncomingKeyManager(args.db)
@@ -119,6 +148,12 @@ Examples:
   # Revoke an API key (by name)
   python manage_keys.py revoke "Client Name"
 
+  # Re-enable a revoked API key (by ID)
+  python manage_keys.py enable 5
+
+  # Re-enable a revoked API key (by name)
+  python manage_keys.py enable "Client Name"
+
   # Show statistics
   python manage_keys.py stats
         """
@@ -143,6 +178,11 @@ Examples:
     parser_revoke = subparsers.add_parser('revoke', help='Revoke an API key by ID, name, or API key')
     parser_revoke.add_argument('identifier', help='API key, ID (number), or name to revoke')
     parser_revoke.set_defaults(func=cmd_revoke)
+
+    # Enable command
+    parser_enable = subparsers.add_parser('enable', help='Re-enable a revoked API key by ID, name, or API key')
+    parser_enable.add_argument('identifier', help='API key, ID (number), or name to enable')
+    parser_enable.set_defaults(func=cmd_enable)
 
     # Stats command
     parser_stats = subparsers.add_parser('stats', help='Show statistics')

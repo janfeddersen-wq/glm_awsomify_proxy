@@ -6,6 +6,7 @@ A smart proxy server for Cerebras API with intelligent key rotation, request rou
 
 - 🔄 **Smart API Key Rotation** - Automatic rotation on rate limits (429) with cooldown tracking
 - 🚀 **Strategic Routing** - Routes large requests (>120k tokens) to alternative APIs (Synthetic/Z.ai)
+- 🖼️ **Vision Model Routing** - Automatically routes image requests to Qwen vision model
 - ⚡ **Fallback on Cooldown** - Routes to alternative APIs when all Cerebras keys are rate-limited
 - 🔧 **Smart Error Handling** - Auto-retries with alternative APIs on 400/503 errors and embedded quota errors from Cerebras
 - 🔐 **Incoming API Key Management** - SQLite-based authentication for client requests
@@ -70,6 +71,10 @@ python manage_keys.py revoke sk-abc123...     # by API key
 python manage_keys.py revoke 5                # by ID from list output
 python manage_keys.py revoke "Client Name"    # by name
 
+# Re-enable a revoked API key (by API key, ID, or name)
+python manage_keys.py enable 5                # by ID
+python manage_keys.py enable "Client Name"    # by name
+
 # View statistics
 python manage_keys.py stats
 ```
@@ -115,6 +120,55 @@ ZAI_API_KEY=sk-your-zai-key
 ```
 
 Normal-sized requests continue using Cerebras API.
+
+## Vision Model Routing
+
+Requests containing images are automatically detected and routed to a vision-capable model.
+
+### How It Works
+
+The proxy scans the `messages` array for OpenAI-style image content:
+```json
+{
+  "messages": [{
+    "role": "user",
+    "content": [
+      {"type": "text", "text": "What's in this image?"},
+      {"type": "image_url", "image_url": {"url": "https://example.com/image.png"}}
+    ]
+  }]
+}
+```
+
+When detected, the request is routed to:
+- **API**: Synthetic API (`api.synthetic.new`)
+- **Model**: `hf:Qwen/Qwen3-VL-235B-A22B-Instruct`
+
+### Requirements
+
+Set in `.env`:
+```bash
+SYNTHETIC_API_KEY=sk-your-synthetic-key
+```
+
+### Example Usage
+
+```bash
+curl -X POST http://localhost:18080/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama-3.3-70b",
+    "messages": [{
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Describe this image"},
+        {"type": "image_url", "image_url": {"url": "https://example.com/photo.jpg"}}
+      ]
+    }]
+  }'
+```
+
+The proxy will automatically use the Qwen vision model regardless of the requested model.
 
 ## Fallback on Cooldown
 
@@ -209,6 +263,10 @@ Client Request
 [Estimate Token Count from Message Content]
     ↓
 > 120k tokens? → Route to Synthetic API → Fails? → Route to Z.ai API
+    ↓
+[Check for Image Content]
+    ↓
+Has images? → Route to Synthetic API with Qwen Vision Model
     ↓
 < 120k tokens? → [Check if all Cerebras keys rate-limited]
     ↓                                    ↓
