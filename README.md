@@ -5,7 +5,7 @@ A smart proxy server for Cerebras API with intelligent key rotation, request rou
 ## Features
 
 - 🔄 **Smart API Key Rotation** - Automatic rotation on rate limits (429) with cooldown tracking
-- 🚀 **Strategic Routing** - Routes large requests (>120k tokens) to alternative APIs (Synthetic/Z.ai)
+- 🚀 **Strategic Routing** - Routes large requests (configurable threshold, default 120k tokens) to alternative APIs (Synthetic/Z.ai)
 - 🖼️ **Vision Model Routing** - Automatically routes image requests to Qwen vision model
 - ⚡ **Fallback on Cooldown** - Routes to alternative APIs when all Cerebras keys are rate-limited
 - 🔧 **Smart Error Handling** - Auto-retries with alternative APIs on 400/503 errors and embedded quota errors from Cerebras
@@ -104,7 +104,7 @@ curl -X POST http://localhost:18080/chat/completions \
 
 ## Strategic Routing for Large Requests
 
-Requests >120k tokens (~550 KB) are automatically routed to alternative APIs:
+Large requests are automatically routed to alternative APIs based on a configurable token threshold (default: 120k tokens):
 
 **Token Estimation:** Uses Content-Length header with empirically-determined ratio of 4.7 bytes/token based on 248 real API request samples. Fast and accurate without parsing request body.
 
@@ -230,6 +230,7 @@ The proxy automatically routes to alternative APIs when Cerebras encounters cert
 |----------|---------|-------------|
 | `CEREBRAS_API_KEYS` | *required* | JSON object with Cerebras API keys |
 | `CEREBRAS_COOLDOWN` | `60` | Cooldown seconds after rate limiting |
+| `TOKEN_THRESHOLD` | `120000` | Token threshold for routing to alternative APIs |
 | `ENABLE_INCOMING_AUTH` | `false` | Enable client API key authentication |
 | `INCOMING_KEY_DB` | `./data/incoming_keys.db` | SQLite database path |
 | `SYNTHETIC_API_KEY` | - | API key for Synthetic API |
@@ -262,13 +263,13 @@ Client Request
     ↓
 [Estimate Token Count from Message Content]
     ↓
-> 120k tokens? → Route to Synthetic API → Fails? → Route to Z.ai API
+> TOKEN_THRESHOLD? → Route to Synthetic API → Fails? → Route to Z.ai API
     ↓
 [Check for Image Content]
     ↓
 Has images? → Route to Synthetic API with Qwen Vision Model
     ↓
-< 120k tokens? → [Check if all Cerebras keys rate-limited]
+< TOKEN_THRESHOLD? → [Check if all Cerebras keys rate-limited]
     ↓                                    ↓
     ↓                    Yes + FALLBACK_ON_COOLDOWN=true?
     ↓                                    ↓

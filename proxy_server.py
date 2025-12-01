@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Target API host
 TARGET_API_HOST = "https://api.cerebras.ai/v1/"
 
-# Alternative API hosts for large requests (>120k tokens)
+# Alternative API hosts for large requests (configurable token threshold)
 SYNTHETIC_API_HOST = "https://api.synthetic.new/openai/v1/"
 SYNTHETIC_MODEL = "hf:zai-org/GLM-4.6"
 SYNTHETIC_VISION_MODEL = "hf:Qwen/Qwen3-VL-235B-A22B-Instruct"
@@ -30,10 +30,10 @@ ZAI_MODEL = "glm-4.6"
 
 # Token estimation threshold based on Content-Length header
 # From empirical analysis: 4.7 bytes/token average
-# 120k tokens * 4.7 = 564,000 bytes (~550 KB)
-TOKEN_THRESHOLD = 120000  # 120k tokens
+# Configurable via TOKEN_THRESHOLD environment variable (default: 120k tokens)
+TOKEN_THRESHOLD = int(os.environ.get("TOKEN_THRESHOLD", "120000"))
 BYTES_PER_TOKEN = 4.7
-CONTENT_LENGTH_THRESHOLD = int(TOKEN_THRESHOLD * BYTES_PER_TOKEN)  # 564,000 bytes
+CONTENT_LENGTH_THRESHOLD = int(TOKEN_THRESHOLD * BYTES_PER_TOKEN)
 
 # Error codes that trigger key rotation
 ROTATE_KEY_ERROR_CODES = {429, 500}
@@ -859,7 +859,7 @@ async def main():
     zai_api_key = os.environ.get("ZAI_API_KEY")
 
     if synthetic_api_key:
-        logger.info("Synthetic API key configured for large requests (>120k tokens)")
+        logger.info(f"Synthetic API key configured for large requests (>{TOKEN_THRESHOLD:,} tokens)")
     if zai_api_key:
         logger.info("Z.ai API key configured as fallback for large requests")
 
